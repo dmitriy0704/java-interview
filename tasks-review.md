@@ -5,7 +5,10 @@
 ```java
 class UserService {
 
+//  Нельзя внедряемые бины создавать через new(),
+// теряется контроль управления и прокси
     private UserRepository repo = new UserRepository();
+
     private RegionService regionService;
 
     public UserService(final ApplicationContext appCtx) {
@@ -14,6 +17,9 @@ class UserService {
 
     public void processNewUsers(final List<User> users, String regionName) {
         …
+
+// Вызов транзакционного метода из нетранзакционного, 
+// необходимо использовать Self Injection
         users = createUsers(users);
         …
         users.stream()
@@ -27,12 +33,17 @@ class UserService {
                 .collect(Collectors.toList());
     }
 
+// Неиспользуемый метод
     private User getUser(final int userId) {
         return repo.getUserById(userId);
     }
 }
 ```
 
+
+
+
+------------
 ## Сбер
 
 ```java
@@ -40,6 +51,9 @@ class CodeProcessor {
 
     public void process(List<Code> codes) {
         for (Code code : codes) {
+
+// 1. Множественные if можно заменить на switch:
+
             if (CodeType.ITCP == code.getCodeType()) {
                 doSmthngITCP();
             } 
@@ -52,8 +66,18 @@ class CodeProcessor {
             else {
                 doDefault();
             }
+
+/*  3. Замена: 
+            switch(code.getCodeType()){
+                case CodeType.ITCP -> System.out.println("Handling ITCP");
+                case CodeType.TLS -> System.out.println("Handling TLS");
+                case CodeType.OTHER -> System.out.println("Handling Other");
+                default -> System.out.println("Handling Default Case");
+           } */
         }
     }
+
+// 2. Текст, выводимый в методах можно выводить в switch  
 
     private void doSmthngITCP() {
         System.out.println("Handling ITCP");
@@ -72,6 +96,7 @@ class CodeProcessor {
     }
 }
  
+
 enum CodeType {
     ITCP, TLS, OTHER
 }
@@ -103,304 +128,10 @@ public class CodeProcessingApp {
 ```
 
 
-## WB
-``` java
 
 
-// 1. Сделать ревью
-// 2. Что будет если упадет сеть в строке "//упала сеть" (и что делать)
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.web.reactive.function.BodyInserters;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
-
-import java.util.List;
-import java.util.Map;
-
-@Component
-public class InterviewService {
-
-    private final ScoreRepository scoreRepository;
-    private final TransactionTemplate transactionTemplate;
-    private final InterviewScoreMLService interviewScoreMLService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
-    public InterviewService(ScoreRepository scoreRepository,
-                            TransactionTemplate transactionTemplate,
-                            InterviewScoreMLService interviewScoreMLService) {
-        this.scoreRepository = scoreRepository;
-        this.transactionTemplate = transactionTemplate;
-        this.interviewScoreMLService = interviewScoreMLService;
-    }
-
-    /**
-     * Метод считает сколько очков заработал кандидат,
-     * сохраняет результат в базу и кидает callback об этом во внешний сервис
-     */
-    public void process(Candidate c) {
-        transactionTemplate.executeWithoutResult(status -> {
-            Score s = interviewScoreMLService.compute(c);
-                String body = objectMapper.writeValueAsString(Map.of(c.getName(), s));
-
-            Mono<ResponseEntity<Void>> request = WebClient.create()
-                    .post()
-                    .body(BodyInserters.fromValue(body))
-                    .retrieve()
-                    .toBodilessEntity();
-
-            scoreRepository.saveScore(s);
-        });
-        //упала сеть
-    }
-}
-
-class Candidate {
-    private final String name;
-    private final List<Integer> tasksSolvedId;
-
-    public Candidate(String name, List<Integer> tasksSolvedId) {
-        this.name = name;
-        this.tasksSolvedId = tasksSolvedId;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public List<Integer> getTasksSolvedId() {
-        return tasksSolvedId;
-    }
-}
-
-class Score {
-    private final String name;
-    private final int score;
-
-    public Score(String name, int score) {
-        this.name = name;
-        this.score = score;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public int getScore() {
-        return score;
-    }
-}#wilberries 
-Прислать задачу | Подписаться
-```
-
-
-## Газпромбанк
-
-```java
-Сделать ревью
-/**
-* Метод работает не всегда корректно.
-* Как его можно отрефакторить или переписать, и как проверить, что ничего не сломалось?
-*
-* Метод возвращает индекс элемента в последовательности чисел, который соответствует дубликату.
-*
-* @param numbers
-* @return
-* 
-* 1,2,3,4,4,5,6
-* 4
-* 
-*/
-public int findDuplicateIndex(int... numbers) {
-
-    int[] countArray = new int[nubmers.length];
-    for (int i = 0; i < numbers.length; i++) {
-        int current = numbers[i];
-        if (countArray[current] > 0) {
-            return i;
-        } else {
-            countArray[current] += 1;
-        }
-    }
-    throw new CustomException("Duplicate not found!");
-}
-```
-
-## Тбанк
-
-```java
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-//Отработает ли CountDownLatch нужное количество раз?
-public class Increment {
-  private static int counter1 = 0;
-  private static int counter2 = 0;
-  Lock lock = new ReentranLock();
-
-  public static void main(String[] args) throws InterruptedException {
-    int tasksCount = 100_000;
-    CountDownLatch latch = new CountDownLatch(tasksCount);
-    ExecutorService executor = Executors.newFixedThreadPool(100);
-
-    for (int i = 0; i < tasksCount; i++) {
-      executor.submit(() -> {
-          counter1++;
-          counter2++; 
-        latch.countDown();
-      });
-    }
-
-    latch.await();
-//сколько будет выведено?
-    System.out.println(counter1);
-    System.out.println(counter2);
-    System.exit(0);
-  }
-}#tbank #repeat
-Прислать задачу | Подписаться
-```
-
-## web tech
-
-```java
-
-// Сделать ревью
-
-public class UserUpdater {
-	@Autowired
-	private CompanyRepository companyRepository;
-
-	@Autowired
-	private UserRepository userRepository;
-
-	@Autowired
-	private RemoteUserInfoProvider remoteUserInfoProvider;
-
-	private Logger logger = Logger.getLogger(UserUpdater.class.getName());
-
-	public void fillUsersData() {
-		 try {
-				companyRepository.findAll().forEach(company ->
-					 updateUsersData(company.getUsers())
-				);
-			} catch (Exception e) {
-				logger.error("Error");
-			}
-
-	}
-
-	@Transactional
-	private void updateUsersData(List<User> users) {
-		// tx.begin
-		userRepository.lockUsers(users); 
-		users.parallelStream().forEach(user -> {
-				UserInfo userInfo = remoteUserInfoProvider.getUserInfo(user.getId());
-				user.updateData(userRepository); // update user fields
-				userRepository.save(user);
-				}
-		);
-	}
-}
-```
-
-
-## Альфа банк
-
-```java
-
-// Сделать ревью, найти проблемы
-
-@RequiredArgsConstructor
-@RestController("/resize/v1")
-public class Controller {
-    
-    private final CachedPhotosService cachedPhotosService;
-    
-    @GetMapping("/resized-photo/{photo-id}")
-    public PhootoDTO getResizedPhoto(@PathVariable("photo-id") String photoId) {
-        return cachedPhotosService.iconifiedPhoto(photoId);
-    }
-}
-
-@Component
-@RequiredArgsConstructor
-public class CachedPhotosService {
-   private static final String RESIZED_PHOTO_CACHE_NAME = "RESIZED_PHOTO_CACHE_NAME";
-
-   private final PhotoRepository photoRepository;
-   private final PhotoValidationService photoValidationService;
-   private final PhotoOperations photoOperations;
-
-   @Cacheable(cacheNames = RESIZED_PHOTO_CACHE_NAME)
-   public PhotoDTO resizedPhoto(String photoId, int width, int height) {
-       photoValidationService.validateSize(width, height);
-
-       Photo photo = photoRepository.findById(photoId);
-
-       PhotoDTO photoDto = ConversionUtils.convert(photo);
-       var resizedPhoto = photoOperations.resize(photoDto, width, height);
-
-       return resizedPhoto;
-   }
-
-   public PhotoDTO iconifiedPhoto(String photoId) {
-       return resizedPhoto(photoId, 100, 100);
-   }
-}
-```
-
-## Альфа банк
-
-```java
-
-// провести ревью - всё ли здесь хорошо?
-class Scratch {
-    private static final Logger log = getLogger(Scratch.class);
-    private static volatile boolean ready = false;
-    private static final Lock rLock = new ReentrantLock();
-    private static final Condition readyCondition = rLock.newCondition();
-
-    private static void waitAndLog() {
-        
-        try {
-            rLock.lock();
-            log.info("rLock acquired, ready: {}", ready);
-            if(!ready)
-                readyCondition.await();
-            log.info("ready was awaited: {}", ready);
-        }
-        catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        finally {
-            rLock.unlock();
-        }
-    }
-
-    public static void main(String[] args) {
-        new Thread(Scratch::waitAndLog).start();
-        
-        try {
-            rLock.lock();
-            ready = true;
-            log.info("signal about ready");
-            readyCondition.signal();
-        }
-        finally {
-            rLock.unlock();
-        }
-    }
-}
-```
-
-
+------------
 ## Сбер
-
 
 ```java
 
@@ -459,21 +190,365 @@ public class OrderRequest {
 }
 ```
 
-## СБЕР
+
+
+---------------
+## Райффайзен
 
 ```java
-// Сделать рефакторинг кода
 
-@Transactional
- public void process(String oldName, String newName) { 
-     Long id = exec("select id from file where name='" + oldName + "'"); //выполнение запроса к БД 
-     insert 
-     processFile(oldName, newName); //переименование файла на диске
-	exec("update file set name='" + newName + "' where id = " + id);  
- }
+// Что произойдет с изменениями в бд после блока catch ?
+
+@Service
+public class A {
+
+    @Autowired
+    B b;
+
+    @Transactional
+    public void doStuff() {
+        try {
+            b.doStuff();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        // do some stuff
+    }
+
+}
+
+@Service
+public class B {
+
+    @Transactional
+    public void doStuff() {
+        // do some stuff
+        throw new RuntimeException();
+    }
+
+}
 
 ```
 
+
+
+---------------
+## Альфа банк
+
+```java
+
+// Сделать ревью, найти проблемы
+
+@RequiredArgsConstructor
+@RestController("/resize/v1")
+public class Controller {
+    
+    private final CachedPhotosService cachedPhotosService;
+    
+    @GetMapping("/resized-photo/{photo-id}")
+    public PhootoDTO getResizedPhoto(@PathVariable("photo-id") String photoId) {
+        return cachedPhotosService.iconifiedPhoto(photoId);
+    }
+}
+
+@Component
+@RequiredArgsConstructor
+public class CachedPhotosService {
+   private static final String RESIZED_PHOTO_CACHE_NAME = "RESIZED_PHOTO_CACHE_NAME";
+
+   private final PhotoRepository photoRepository;
+   private final PhotoValidationService photoValidationService;
+   private final PhotoOperations photoOperations;
+
+   @Cacheable(cacheNames = RESIZED_PHOTO_CACHE_NAME)
+   public PhotoDTO resizedPhoto(String photoId, int width, int height) {
+       photoValidationService.validateSize(width, height);
+
+       Photo photo = photoRepository.findById(photoId);
+
+       PhotoDTO photoDto = ConversionUtils.convert(photo);
+       var resizedPhoto = photoOperations.resize(photoDto, width, height);
+
+       return resizedPhoto;
+   }
+
+   public PhotoDTO iconifiedPhoto(String photoId) {
+       return resizedPhoto(photoId, 100, 100);
+   }
+}
+```
+
+
+
+
+--------------
+## Тбанк
+
+```java
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+//Отработает ли CountDownLatch нужное количество раз?
+public class Increment {
+  private static int counter1 = 0;
+  private static int counter2 = 0;
+  Lock lock = new ReentranLock();
+
+  public static void main(String[] args) throws InterruptedException {
+    int tasksCount = 100_000;
+    CountDownLatch latch = new CountDownLatch(tasksCount);
+    ExecutorService executor = Executors.newFixedThreadPool(100);
+
+    for (int i = 0; i < tasksCount; i++) {
+      executor.submit(() -> {
+          counter1++;
+          counter2++; 
+        latch.countDown();
+      });
+    }
+
+    latch.await();
+//сколько будет выведено?
+    System.out.println(counter1);
+    System.out.println(counter2);
+    System.exit(0);
+  }
+}
+```
+
+
+
+-------------
+## Альфа банк
+
+```java
+
+// провести ревью - всё ли здесь хорошо?
+class Scratch {
+    private static final Logger log = getLogger(Scratch.class);
+    private static volatile boolean ready = false;
+    private static final Lock rLock = new ReentrantLock();
+    private static final Condition readyCondition = rLock.newCondition();
+
+    private static void waitAndLog() {
+        
+        try {
+            rLock.lock();
+            log.info("rLock acquired, ready: {}", ready);
+            if(!ready)
+                readyCondition.await();
+            log.info("ready was awaited: {}", ready);
+        }
+        catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        finally {
+            rLock.unlock();
+        }
+    }
+
+    public static void main(String[] args) {
+        new Thread(Scratch::waitAndLog).start();
+        
+        try {
+            rLock.lock();
+            ready = true;
+            log.info("signal about ready");
+            readyCondition.signal();
+        }
+        finally {
+            rLock.unlock();
+        }
+    }
+}
+```
+
+
+
+
+---------------
+## WB
+``` java
+
+// 1. Сделать ревью
+// 2. Что будет если упадет сеть в строке "//упала сеть" (и что делать)
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
+
+import java.util.List;
+import java.util.Map;
+
+@Component
+public class InterviewService {
+
+    private final ScoreRepository scoreRepository;
+    private final TransactionTemplate transactionTemplate;
+    private final InterviewScoreMLService interviewScoreMLService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public InterviewService(ScoreRepository scoreRepository,
+                            TransactionTemplate transactionTemplate,
+                            InterviewScoreMLService interviewScoreMLService) {
+        this.scoreRepository = scoreRepository;
+        this.transactionTemplate = transactionTemplate;
+        this.interviewScoreMLService = interviewScoreMLService;
+    }
+
+/**
+ * Метод считает сколько очков заработал кандидат,
+ * сохраняет результат в базу и кидает callback об этом во внешний сервис
+ */
+    public void process(Candidate c) {
+        transactionTemplate.executeWithoutResult(status -> {
+            Score s = interviewScoreMLService.compute(c);
+                String body = objectMapper.writeValueAsString(Map.of(c.getName(), s));
+
+            Mono<ResponseEntity<Void>> request = WebClient.create()
+                    .post()
+                    .body(BodyInserters.fromValue(body))
+                    .retrieve()
+                    .toBodilessEntity();
+
+            scoreRepository.saveScore(s);
+        });
+        //упала сеть
+    }
+}
+
+class Candidate {
+    private final String name;
+    private final List<Integer> tasksSolvedId;
+
+    public Candidate(String name, List<Integer> tasksSolvedId) {
+        this.name = name;
+        this.tasksSolvedId = tasksSolvedId;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public List<Integer> getTasksSolvedId() {
+        return tasksSolvedId;
+    }
+}
+
+class Score {
+    private final String name;
+    private final int score;
+
+    public Score(String name, int score) {
+        this.name = name;
+        this.score = score;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public int getScore() {
+        return score;
+    }
+}
+```
+
+
+
+
+----------------
+## Газпромбанк
+
+```java
+// Сделать ревью
+/**
+* Метод работает не всегда корректно.
+* Как его можно отрефакторить или переписать, и как проверить, что ничего не сломалось?
+*
+* Метод возвращает индекс элемента в последовательности чисел, который соответствует дубликату.
+*
+* @param numbers
+* @return
+* 
+* 1,2,3,4,4,5,6
+* 4
+* 
+*/
+public int findDuplicateIndex(int... numbers) {
+
+    int[] countArray = new int[nubmers.length];
+    for (int i = 0; i < numbers.length; i++) {
+        int current = numbers[i];
+        if (countArray[current] > 0) {
+            return i;
+        } else {
+            countArray[current] += 1;
+        }
+    }
+    throw new CustomException("Duplicate not found!");
+}
+```
+
+
+
+
+
+
+------------
+## web tech
+
+```java
+
+// Сделать ревью
+
+public class UserUpdater {
+	@Autowired
+	private CompanyRepository companyRepository;
+
+	@Autowired
+	private UserRepository userRepository;
+
+	@Autowired
+	private RemoteUserInfoProvider remoteUserInfoProvider;
+
+	private Logger logger = Logger.getLogger(UserUpdater.class.getName());
+
+	public void fillUsersData() {
+		 try {
+				companyRepository.findAll().forEach(company ->
+					 updateUsersData(company.getUsers())
+				);
+			} catch (Exception e) {
+				logger.error("Error");
+			}
+
+	}
+
+	@Transactional
+	private void updateUsersData(List<User> users) {
+		// tx.begin
+		userRepository.lockUsers(users); 
+		users.parallelStream().forEach(user -> {
+				UserInfo userInfo = remoteUserInfoProvider.getUserInfo(user.getId());
+				user.updateData(userRepository); // update user fields
+				userRepository.save(user);
+			}
+		);
+	}
+}
+```
+
+
+
+
+
+-----------
 ## Магнит
 
 ```java
@@ -575,6 +650,10 @@ public final class Cat4 {
 ```
 
 
+
+
+
+--------------------------
 ## Точка банк (стажировка)
 
 ```java
@@ -603,39 +682,20 @@ boolean containsStringInData(String csvFile, String str) throw IOException {
 
 ```
 
-## Райффайзен
+
+---------------
+## СБЕР
 
 ```java
+// Сделать рефакторинг кода
 
-// Что произойдет с изменениями в бд после блока catch ?
-
-@Service
-public class A {
-
-    @Autowired
-    B b;
-
-    @Transactional
-    public void doStuff() {
-        try {
-            b.doStuff();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        // do some stuff
-    }
-
-}
-
-@Service
-public class B {
-
-    @Transactional
-    public void doStuff() {
-        // do some stuff
-        throw new RuntimeException();
-    }
-
-}
+@Transactional
+ public void process(String oldName, String newName) { 
+     Long id = exec("select id from file where name='" + oldName + "'"); //выполнение запроса к БД 
+     insert 
+     processFile(oldName, newName); //переименование файла на диске
+    exec("update file set name='" + newName + "' where id = " + id);  
+ }
 
 ```
+
