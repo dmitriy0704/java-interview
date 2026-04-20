@@ -3,19 +3,21 @@
 ## Сбер
 
 ```java
+@Service
 class UserService {
 
 //  Нельзя внедряемые бины создавать через new(),
 // теряется контроль управления и прокси
     private UserRepository repo = new UserRepository();
 
-    private RegionService regionService;
-
+    private final RegionService regionService; //-> в констурктор
+    // Юнит тесты
     public UserService(final ApplicationContext appCtx) {
+        // Строки не используются. Не использовать магические константы
         regionService = appCtx.getBean("regionService", RegionService.class);
     }
 
-    public void processNewUsers(final List<User> users, String regionName) {
+    public void processNewUsers(final List<User> users, String regionName) {//-> Enum
         …
 
 // Вызов транзакционного метода из нетранзакционного, 
@@ -24,10 +26,11 @@ class UserService {
         …
         users.stream()
             .foreach(u -> regionService.updateRegionLink(u.getId(), regionName));
+        
     }
 
     @Transactional
-    public List<User> createUsers(final List<User> users) {
+    public List<User> createUsers(final List<User> users) { //-> Написать один инсерт
         return users.stream()
                 .map(u -> repo.saveUser(u))
                 .collect(Collectors.toList());
@@ -39,6 +42,7 @@ class UserService {
     }
 }
 ```
+
 
 
 
@@ -130,6 +134,119 @@ public class CodeProcessingApp {
 
 
 
+
+---------------
+## Райффайзен
+
+```java
+
+// Что произойдет с изменениями в бд после блока catch ?
+
+@Service
+public class A {
+
+    @Autowired
+    B b;
+
+    @Transactional
+    public void doStuff() {
+        try {
+            b.doStuff();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        // do some stuff
+    }
+}
+
+@Service
+public class B {
+
+    @Transactional
+    public void doStuff() {
+        // do some stuff
+        throw new RuntimeException();
+    }
+}
+
+/* 
+1. Одна транзакция: По умолчанию @Transactional имеет уровень распространения REQUIRED. 
+Это значит, что метод B.doStuff() не создает новую транзакцию, а присоединяется к уже существующей 
+транзакции метода A.doStuff().
+
+2. Пометка на откат: Когда внутри метода B выбрасывается RuntimeException, Spring перехватывает его 
+(через прокси-объект) и помечает текущую транзакцию как rollback-only (только для отката).
+
+3. Игнорирование catch: То, что вы в методе A обернули вызов в try-catch, предотвращает немедленный 
+вылет ошибки из метода A, но статус транзакции уже изменен на "испорчена".
+
+4. Финал: Когда метод A.doStuff() успешно завершается, Spring пытается зафиксировать транзакцию (commit). 
+Но, видя метку rollback-only, он понимает, что целостность данных нарушена, делает rollback и выбрасывает UnexpectedRollbackException.
+*/
+
+```
+
+
+
+
+
+---------------
+## Альфа банк
+
+```java
+
+// Сделать ревью, найти проблемы
+
+@RequiredArgsConstructor
+@RestController("/resize/v1") // -> Адрес тут не пишется
+//@RequestMapping("/resize/v1") -> Указание адреса в @RequestMapping
+public class Controller {
+    
+    private final CachedPhotosService cachedPhotosService;
+    
+    @GetMapping("/resized-photo/{photo-id}")
+    public PhootoDTO getResizedPhoto(@PathVariable("photo-id") String photoId) {
+        return cachedPhotosService.iconifiedPhoto(photoId);
+    }
+}
+
+@Component
+@RequiredArgsConstructor
+public class CachedPhotosService {
+   private static final String RESIZED_PHOTO_CACHE_NAME = "RESIZED_PHOTO_CACHE_NAME";
+
+   private final PhotoRepository photoRepository;
+   private final PhotoValidationService photoValidationService;
+   private final PhotoOperations photoOperations;
+
+   @Cacheable(cacheNames = RESIZED_PHOTO_CACHE_NAME)
+   public PhotoDTO resizedPhoto(String photoId, int width, int height) {
+       photoValidationService.validateSize(width, height);
+
+       Photo photo = photoRepository.findById(photoId); // ->
+
+        //-> С Optional обрабатываем исключение, "если фото не найдено"
+        //   Optional<Photo> photo = photoRepository.findById(photoId).orElseThrow(
+        //        () -> new EntityNotFoundException("Photo not found with id: " + photoId)
+        //   );
+
+        //-> Я бы обработал ситуацию "некорректной конвертации/ресайза/некорректных размеров"
+       PhotoDTO photoDto = ConversionUtils.convert(photo);
+       var resizedPhoto = photoOperations.resize(photoDto, width, height);
+
+       return resizedPhoto; //-> return photoOperations.resize(photoDto, width, height);
+   }
+
+   public PhotoDTO iconifiedPhoto(String photoId) {
+       return resizedPhoto(photoId, 100, 100);
+   }
+}
+```
+
+
+
+
+
 ------------
 ## Сбер
 
@@ -192,95 +309,6 @@ public class OrderRequest {
 
 
 
----------------
-## Райффайзен
-
-```java
-
-// Что произойдет с изменениями в бд после блока catch ?
-
-@Service
-public class A {
-
-    @Autowired
-    B b;
-
-    @Transactional
-    public void doStuff() {
-        try {
-            b.doStuff();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        // do some stuff
-    }
-
-}
-
-@Service
-public class B {
-
-    @Transactional
-    public void doStuff() {
-        // do some stuff
-        throw new RuntimeException();
-    }
-
-}
-
-```
-
-
-
----------------
-## Альфа банк
-
-```java
-
-// Сделать ревью, найти проблемы
-
-@RequiredArgsConstructor
-@RestController("/resize/v1")
-public class Controller {
-    
-    private final CachedPhotosService cachedPhotosService;
-    
-    @GetMapping("/resized-photo/{photo-id}")
-    public PhootoDTO getResizedPhoto(@PathVariable("photo-id") String photoId) {
-        return cachedPhotosService.iconifiedPhoto(photoId);
-    }
-}
-
-@Component
-@RequiredArgsConstructor
-public class CachedPhotosService {
-   private static final String RESIZED_PHOTO_CACHE_NAME = "RESIZED_PHOTO_CACHE_NAME";
-
-   private final PhotoRepository photoRepository;
-   private final PhotoValidationService photoValidationService;
-   private final PhotoOperations photoOperations;
-
-   @Cacheable(cacheNames = RESIZED_PHOTO_CACHE_NAME)
-   public PhotoDTO resizedPhoto(String photoId, int width, int height) {
-       photoValidationService.validateSize(width, height);
-
-       Photo photo = photoRepository.findById(photoId);
-
-       PhotoDTO photoDto = ConversionUtils.convert(photo);
-       var resizedPhoto = photoOperations.resize(photoDto, width, height);
-
-       return resizedPhoto;
-   }
-
-   public PhotoDTO iconifiedPhoto(String photoId) {
-       return resizedPhoto(photoId, 100, 100);
-   }
-}
-```
-
-
-
-
 --------------
 ## Тбанк
 
@@ -316,6 +344,8 @@ public class Increment {
   }
 }
 ```
+
+
 
 
 
@@ -363,6 +393,7 @@ class Scratch {
     }
 }
 ```
+
 
 
 
@@ -462,6 +493,7 @@ class Score {
 
 
 
+
 ----------------
 ## Газпромбанк
 
@@ -494,7 +526,6 @@ public int findDuplicateIndex(int... numbers) {
     throw new CustomException("Duplicate not found!");
 }
 ```
-
 
 
 
@@ -683,6 +714,8 @@ boolean containsStringInData(String csvFile, String str) throw IOException {
 ```
 
 
+
+
 ---------------
 ## СБЕР
 
@@ -698,4 +731,3 @@ boolean containsStringInData(String csvFile, String str) throw IOException {
  }
 
 ```
-

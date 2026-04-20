@@ -13,6 +13,50 @@
 
 ```
 
+
+
+## itone
+
+```java
+itone #repeat
+/**
+ * Посчитать сумму элементов списка (более 1 млн. элементов),
+ * используя для этого 10 потоков
+ */
+
+    public static long sum(List<Long> numbers) {
+        final int threads = 10;
+        List<List<Long>> subLists = split(numbers, threads);
+
+        // TODO: make it work!
+
+        return ???;
+    }
+
+    private static List<List<Long>> split(List<Long> numbers, int parts) {
+        int size = numbers.size();
+        int subListSize = (int) Math.ceil((double) size / parts);
+
+        List<List<Long>> result = new ArrayList<>(parts);
+        for (int i = 0; i < parts; i++) {
+            int fromIndex = i * subListSize;
+            if (fromIndex >= size) {
+                result.add(Collections.emptyList());
+            } else {
+                int toIndex = Math.min((i + 1) * subListSize, size);
+                List<Long> sublist = numbers.subList(fromIndex, toIndex);
+                result.add(sublist);
+            }
+        }
+        return result;
+    }#itone 
+Прислать задачу | Подписаться
+```
+
+
+
+
+
 ## Тбанк
 
 ```java
@@ -20,8 +64,9 @@
 
 // [10,100,300,200,1000,20,30] k=3 -> 20
 
-
 ```
+
+
 
 ## WB
 
@@ -32,6 +77,8 @@
 in:  [3, 0, 4, 0, 1]
 out: [3, 4, 1, 0, 0]
 ```
+
+
 
 
 ## Альфа банк
@@ -57,6 +104,9 @@ public class MainJava {
 }
 ```
 
+
+
+
 ## it one
 
 ```java
@@ -74,6 +124,9 @@ private void move(Account a1, Account a2, int summa) {
     }
 }
 ```
+
+
+
 
 
 ## IT ONE
@@ -103,6 +156,9 @@ class Program {
 }
 ```
 
+
+
+
 ## IT ONE
 
 ```java
@@ -114,6 +170,10 @@ class Program {
     }
 }
 ```
+
+
+
+
 
 ## Альфабанк
 
@@ -132,6 +192,9 @@ public class MyService {
 ```
 
 
+
+
+
 ## РСХБ
 
 ```java
@@ -145,6 +208,9 @@ System.out.println(s1 == s2);
 System.out.println(s1 == s3);
 
 ```
+
+
+
 
 
 ## Диасфот
@@ -161,6 +227,10 @@ int find(int[] arr) {
 
 }
 ```
+
+
+
+
 
 
 ## Яндекс/ на стажера
@@ -181,6 +251,9 @@ int find(int[] arr) {
 */
 
 ```
+
+
+
 
 
 ## ИнформЗащита
@@ -208,6 +281,9 @@ int find(int[] arr) {
 
 ```
 
+
+
+
 ## Инсайрес
 
 ```java
@@ -227,6 +303,9 @@ int find(int[] arr) {
 - оценить время выполнения задания
 - написать и продемонстрировать код
 ```
+
+
+
 
 
 ## Сбер
@@ -260,6 +339,9 @@ record KeyMap(int first, String second) {
 ```
 
 
+
+
+
 ## It one
 
 ```java
@@ -288,6 +370,9 @@ public class BeanB() {
 }
 ```
 
+
+
+
 ## Сбер
 
 ```java
@@ -295,6 +380,10 @@ public class BeanB() {
 Написать счетчик обратного отсчета от заданного числа до нуля, который выводит каждое число с паузой в 1 секунду
 #sber| Прислать задачу | Подписаться
 ```
+
+
+
+
 
 ## Иннотех
 
@@ -306,8 +395,11 @@ public class BeanB() {
 
 ```
 
-## Vadarod (беларусь)
 
+
+
+
+## Vadarod (беларусь)
 
 ```java
 
@@ -322,6 +414,8 @@ public class TaskTwo {
     }
 }
 ```
+
+
 
 
 ## Сбер

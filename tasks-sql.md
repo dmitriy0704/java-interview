@@ -1,6 +1,30 @@
 # Задачи по SQL
 
-s
+
+## Иннотех
+
+```sql
+Иннотех #repeat #sql #innotech
+
+Даны две таблицы:
+EMPLOYEES
+-EMP_ID        | NUMBER PK
+-SURNAME       | VARCHAR
+-SALARY        | NUMBER
+-DEPARTMENT_ID | NUMBER FK
+
+DEPARTMENTS
+-DEPARTMENT_ID   | NUMBER PK
+-DEPARTMENT_NAME | VARCHAR
+
+Получить список департаментов и среднюю з/п по департаменту, где средняя з/п по департаменту больше 5000.
+
+Ожидаемый рез-т:
+DEPARTMENT_NAME    AVG_SALARY
+HR                 8000
+IT                 12000Прислать задачу | Подписаться
+```
+
 ## Ozon
 
 ```sql
