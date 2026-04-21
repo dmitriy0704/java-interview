@@ -3,34 +3,56 @@
 ## Сбер
 
 ```java
-@Service
-class UserService {
-
-//  Нельзя внедряемые бины создавать через new(),
+// @Service -> не указана аннотация @Service
+class UserService { //-> Класс, не объявлен как public 
+// TODO: Написать юнит тест для класса
+    
+// Нельзя внедряемые бины создавать через new(),
 // теряется контроль управления и прокси
     private UserRepository repo = new UserRepository();
-
-    private final RegionService regionService; //-> в констурктор
-    // Юнит тесты
+    
+    // Внедрение через конструктор лучше потому что:
+    // 1. Гарантирует, что зависимость будет установлена один раз при запуске приложения 
+    // и не изменится (случайно или намеренно) во время работы. 
+    // 2. При использовании конструктора объект не может быть создан без его зависимостей. 
+    // Spring просто не запустит приложение, если не найдет нужный бин.
+    private  RegionService regionService; //-> Не указан final
+    
+    
     public UserService(final ApplicationContext appCtx) {
         // Строки не используются. Не использовать магические константы
+        // 1. Имя бина может измениться
+        // 2. Сложно тестировать: придется мокировать весь контекст
+        // 3. При внедрении через конструктор Spring обнаруживает циклические зависимости 
         regionService = appCtx.getBean("regionService", RegionService.class);
     }
 
-    public void processNewUsers(final List<User> users, String regionName) {//-> Enum
-        …
-
-// Вызов транзакционного метода из нетранзакционного, 
-// необходимо использовать Self Injection
-        users = createUsers(users);
-        …
-        users.stream()
-            .foreach(u -> regionService.updateRegionLink(u.getId(), regionName));
+    //-> regionName заменить на Enum
+    public void processNewUsers(final List<User> users, String regionName) {
+        // …
         
+        //1.  Вызов транзакционного метода из нетранзакционного, Лучше использовать Self Injection
+        //2.  Перезапись параметров: users = createUsers(users); — параметр users помечен как final, 
+        // этот код просто не скомпилируется, т.к. createUsers() переназначает значение переменной
+        users = createUsers(users);
+        // …
+        users.stream()
+                //1. forEach() а не foreach()
+                //2. Побочные эффекты в Stream: плохой тон, проблема производительности: 
+                // для 1000 пользователей будет выполнено 1000 запросов.
+            .foreach(u -> regionService.updateRegionLink(u.getId(), regionName));
+            // при сложной логике в RegionService обрабатывать по одному пользователю
+            // forEach(u -> regionService.updateRegionLink(u, regionName));
+
+
     }
 
     @Transactional
     public List<User> createUsers(final List<User> users) { //-> Написать один инсерт
+        
+        // Проблема N+1 в БД: В методе createUsers вы вызываете save в цикле. 
+        // Это порождает множество мелких запросов. У Spring Data JPA есть метод saveAll(), 
+        // который работает гораздо эффективнее.
         return users.stream()
                 .map(u -> repo.saveUser(u))
                 .collect(Collectors.toList());
@@ -41,6 +63,74 @@ class UserService {
         return repo.getUserById(userId);
     }
 }
+
+///-> Исправлено:
+
+@Repository
+public interface RegionRepository extends JpaRepository<Region, Long> {
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)// Обязательно для запросов UPDATE/DELETE
+    @Transactional // Нужно, если метод вызывается вне другой транзакции
+    @Query("UPDATE User u SET u.regionName = :regionName WHERE u.id IN :ids")
+    void updateRegionForUsers(@Param("ids") List<Long> ids, @Param("regionName") String regionName);
+}
+
+// Батчинг:
+// # Включаем батчинг (стандарт — от 20 до 50)
+// spring.jpa.properties.hibernate.jdbc.batch_size=50
+
+// # Заставляем Hibernate группировать похожие запросы
+// spring.jpa.properties.hibernate.order_inserts=true
+// spring.jpa.properties.hibernate.order_updates=true
+
+// # (Опционально) Для статистики, чтобы увидеть батчи в логах
+// spring.jpa.properties.hibernate.generate_statistics=true
+// Генерация ID у сущности User не IDENTITY (лучше SEQUENCE), 
+// иначе батчинг на вставку не включится.
+
+
+@Service
+@RequaredArgsConstructor
+public class UserService{
+    
+    public void processNewUsers(List<User> users, String regionName) {
+        /// -> Небольшое количество:
+        // 1. Сохраняем новых пользователей (используем saveAll для батчинга)
+        List<User> savedUsers = repo.saveAll(users);
+        // 2. Собираем ID сохраненных пользователей
+        List<Long> ids = savedUsers.stream()
+                .map(User::getId)
+                .toList();
+        // 3. Один запрос к БД вместо цикла! 
+        // Напрямую через репозиторий, без лишних сервисов.
+        repo.updateRegionForUsers(ids, regionName);
+
+        
+        ///-> Или сразу проставляем регион и сохраняем:
+        // 1. Прямо в памяти проставляем регион каждому пользователю
+        users.forEach(u -> u.setRegionName(regionName));
+        // 2. Сохраняем всех одним махом (Hibernate использует JDBC Batching)
+        repo.saveAll(users);
+        
+        
+        /// -> Если пользователей будет миллион:
+        int batchSize = 50; // Тот же размер, что в настройках hibernate.jdbc.batch_size
+        AtomicInteger counter = new AtomicInteger();
+        userStream.forEach(user -> {
+            user.setRegionName(regionName);
+            repo.save(user); // Пока только складываем в очередь Hibernate
+
+            // Каждые 50 записей сбрасываем данные в БД и чистим память
+            if (counter.incrementAndGet() % batchSize == 0) {
+                entityManager.flush(); // Отправить батч в базу
+                entityManager.clear(); // Очистить кэш Hibernate, чтобы память не кончалась
+            }
+        });
+        
+    }
+}
+
+
 ```
 
 
