@@ -94,7 +94,7 @@ public interface RegionRepository extends JpaRepository<Region, Long> {
 public class UserService{
     
     public void processNewUsers(List<User> users, String regionName) {
-        /// -> Небольшое количество:
+        /// -> Если небольшое количество пользователей:
         // 1. Сохраняем новых пользователей (используем saveAll для батчинга)
         List<User> savedUsers = repo.saveAll(users);
         // 2. Собираем ID сохраненных пользователей
@@ -106,7 +106,7 @@ public class UserService{
         repo.updateRegionForUsers(ids, regionName);
 
         
-        ///-> Или сразу проставляем регион и сохраняем:
+        //-> Или сразу проставляем регион и сохраняем:
         // 1. Прямо в памяти проставляем регион каждому пользователю
         users.forEach(u -> u.setRegionName(regionName));
         // 2. Сохраняем всех одним махом (Hibernate использует JDBC Batching)
@@ -781,9 +781,9 @@ public final class Cat4 {
 
 // Провести код-ревью
 
-boolean containsStringInData(String csvFile, String str) throw IOException {
+boolean containsStringInData(String csvFile, String str) throws IOException {
 
- 	BufferedReader reader = new BufferedReader(new FileReader(csvFile);
+ 	BufferedReader reader = new BufferedReader(new FileReader(csvFile));
 	ArrayList<String> list = new ArrayList();
 
 	String line;
