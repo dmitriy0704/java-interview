@@ -530,3 +530,31 @@ emp
 -id_dep  
 -fio
 ```
+
+
+## X5
+
+```sql
+
+Вывести список отделов, количество сотрудников в которых не превышает 3 человек
+-- Отдел:
+CREATE TABLE department (
+  id   INTEGER      NOT NULL, -- идентификатор отдела
+  name VARCHAR(128) NOT NULL, -- название отдела
+  PRIMARY KEY (id)
+);
+ 
+-- Сотрудник:
+CREATE TABLE employee (
+  id            INTEGER      NOT NULL, -- идентификатор сотрудника
+  department_id INTEGER      NOT NULL, -- идентификатор отдела
+  manager_id    INTEGER,               -- идентификатор начальника
+  name          VARCHAR(128) NOT NULL, -- имя сотрудника
+  salary        DECIMAL      NOT NULL, -- оклад сотрудника
+  PRIMARY KEY (id),
+  FOREIGN KEY (department_id) REFERENCES department(id),
+  FOREIGN KEY (manager_id) REFERENCES employee(id)
+);
+  
+   #x5 | Прислать задачу | Подписаться
+```
