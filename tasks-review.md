@@ -141,7 +141,7 @@ public class UserService{
 
 
 
-## Т-банк (стажировка)
+## Задача #2. Т-банк (стажировка)
 
 ```java
 // Сделать код ревью 
@@ -157,7 +157,8 @@ import java.util.UIID;
  */
 @Service
 public class SeatBookingService {
-
+    
+    //-> FIXME: Сделать внедрение зависимостей через конструктор 
     @Autowired private SeatBookingRepository seatBookingRepository;
     @Autowired private TicketRepository ticketRepository;
     @Autowired private TariffClient tariffClient;
@@ -170,19 +171,42 @@ public class SeatBookingService {
      * @param ticketId ид билета
      */
     @Transactional
-    public void bookSeat(String seatCode, UIID ticketId) {
-        var ticket = ticketRepository.findById(ticketId);
-        // бронируем
+    public void bookSeat(String seatCode, UIID ticketId) { //-> FIXME: UUID
+        
+        // Ищем билет по id
+        //-> FIXME: добавить обработку исключения "Билет не найден"
+        
+        // var ticket = ticketRepository.findById(ticketId);
+        
+        // бронируем: 
+        // Новая бронь места: код места, рейс, билет, статус "Забронировано" 
         var seatBooking = new SeatBooking(seatCode, ticket.get().getFlightId(), ticketId, BookingStatus.BOOKED);
+        // сохраняем бронь
         seatBookingRepository.save(seatBooking);
 
         // ищем базовый тариф для выбранного места в самолете
+        //-> FIXME: "Рест в транзакции"
         var basePrice = tariffClient.getBasePrice(ticket.get().getPlaneModel(), seatCode);
+        
         // ищем данные о клиенте
+        //-> FIXME: 1) getPrincipal() может возвращать объект; 
+        //        2) cервис привязывается к контексту безопасности, поэтому его 
+        //           будет сложно протестировать, если контекст не задан; 
+        //        3) пользователя следует передавать из контроллера
         long userId = (long) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        
+        
+        //-> получение данных клиента из внешнего сервиса
+        //-> FIXME: 1) "Рест в транзакции"; 
+        //        2) Добавить или обработать исключение "Если клиент не найден"
         var userData = customerClient.getCustomer(userId);
+        
+        //-> FIXME: проблема: "println вместо логов"
         System.out.println("Найден пользователь " + userData.getFio() + " номер документа " + userData.getDocument());
+        
         var price = basePrice;
+        
+        //-> FIXME: проблема: "магические константы"
         if (userData.getTariff() == "PREMIUM") {
             // скидка 50%
             price = basePrice * 0.5d;
@@ -191,15 +215,18 @@ public class SeatBookingService {
             // скидка 20%
             price = basePrice * 0.8d;
         }
+        // Новый инвойс на оплату:
         var invoice = new Invoice(price, ticketId, userId);
         // выставляем платежку
         paymentClient.sendInvoice(invoice);
     }
 }
 
-@Data
+@Data // FIXME: Для сущности БД использовать @Entity убрать @Data
 @Table("seat_booking")
 public class SeatBooking {
+    
+    // Добавить поле id и геттеры/сеттеры
 
     @Column
     private String seatCode;
@@ -215,7 +242,7 @@ public class SeatBooking {
 }
 
 public enum BookingStatus {
-    BOOKED, PAID;
+    BOOKED, PAID
 }
 
 /** 
@@ -231,7 +258,7 @@ public enum BookingStatus {
  8. ticketRepository возвращает Optional, но используется ticket.get() без проверки на null.
 
 
- Добавлю свои 5 копеек:
+ Еще:
  1. В SeatBooking не определена колонка с PrimaryKey. Непонятно какой PK (простой или составной).
  2. В SeatBooking хорошо бы добавить @AllArgsConstructor (не уверен, что в текущей конфигурации @Data включает в себя @AllArgsConstructor).
  3. BookingStatus я бы переименовал в BookingStatusEnum, чтобы сразу по имени класса видеть, что это перечисление.
@@ -279,11 +306,15 @@ public enum BookingStatus {
 ```java
 
 /**
-  * API поиска авторов и их книг по имени автора (полное ФИО или часть имени в любом регистре).
-  * Также компонент при каждом поиске обновляет статистику по частоте использования поисковой строки (сбрасывается раз в сутки другой системой)
-  * При обнаружении популярного запроса (> 1000 запросов в сутки), по которому находится много авторов, отправляется алерт.
+  * API поиска авторов и их книг по имени автора (полное ФИО или часть имени 
+    в любом регистре).
+  * Также компонент при каждом поиске обновляет статистику по частоте использования 
+    поисковой строки (сбрасывается раз в сутки другой системой)
+  * При обнаружении популярного запроса (> 1000 запросов в сутки), по которому 
+    находится много авторов, отправляется алерт.
   * Алерт должен отправляться не более 1 раза за сутки для каждого запроса
-  * Все классы на самом деле находятся в разных файлах, однако здесь представлены в одном месте для удобства
+  * Все классы на самом деле находятся в разных файлах, однако здесь представлены 
+    в одном месте для удобства
 */
 
 @RestController

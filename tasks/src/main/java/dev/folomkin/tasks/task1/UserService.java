@@ -1,4 +1,4 @@
-package dev.folomkin.tasks;
+package dev.folomkin.tasks.task1;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;

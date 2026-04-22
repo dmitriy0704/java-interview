@@ -1,4 +1,4 @@
-package dev.folomkin.tasks;
+package dev.folomkin.tasks.task1;
 
 public enum RegionType {
     CENTRAL("Центральный"),
