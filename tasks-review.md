@@ -17,7 +17,6 @@ class UserService { //-> Класс, не объявлен как public
     // Spring просто не запустит приложение, если не найдет нужный бин.
     private  RegionService regionService; //-> Не указан final
     
-    
     public UserService(final ApplicationContext appCtx) {
         //-> Строки не используются. Не использовать магические константы
         // 1. Имя бина может измениться
@@ -137,8 +136,6 @@ public class UserService{
 
 
 ```
-
-
 
 
 ## Задача #2. Т-банк (стажировка)
@@ -300,8 +297,7 @@ public enum BookingStatus {
 ```
 
 
-## Тбанк:
-
+## Задача Тбанк:
 
 ```java
 
@@ -407,9 +403,7 @@ public class Book {
 
 
 
-
-
-## Тбанк
+## Задача Тбанк
 
 ```java
 import java.util.Date;
@@ -457,12 +451,8 @@ public class RewardBillingService {
 ```
 
 
-
-
-
-
 ------------
-## web tech
+## Задача web tech
 
 ```java
 
@@ -507,10 +497,8 @@ public class UserUpdater {
 ```
 
 
-
-
 ------------
-## Сбер
+## Задача Сбер
 
 ```java
 class CodeProcessor {
@@ -594,11 +582,8 @@ public class CodeProcessingApp {
 ```
 
 
-
-
-
 ---------------
-## Райффайзен
+## Задача Райффайзен
 
 ```java
 
@@ -649,11 +634,8 @@ public class B {
 ```
 
 
-
-
-
 ---------------
-## Альфа банк
+## Задача Альфа банк
 
 ```java
 
@@ -706,11 +688,8 @@ public class CachedPhotosService {
 ```
 
 
-
-
-
 ------------
-## Сбер
+## Задача Сбер
 
 ```java
 
@@ -770,9 +749,8 @@ public class OrderRequest {
 ```
 
 
-
 --------------
-## Тбанк
+## Задача Тбанк
 
 ```java
 import java.util.concurrent.CountDownLatch;
@@ -808,11 +786,8 @@ public class Increment {
 ```
 
 
-
-
-
 -------------
-## Альфа банк
+## Задача Альфа банк
 
 ```java
 
@@ -857,10 +832,8 @@ class Scratch {
 ```
 
 
-
-
 ---------------
-## WB
+## Задача WB
 ```java
 
 // 1. Сделать ревью
@@ -952,11 +925,8 @@ class Score {
 ```
 
 
-
-
-
 ----------------
-## Газпромбанк
+## Задача Газпромбанк
 
 ```java
 // Сделать ревью
@@ -989,15 +959,8 @@ public int findDuplicateIndex(int... numbers) {
 ```
 
 
-
-
-
-
-
-
-
 -----------
-## Магнит
+## Задача Магнит
 
 ```java
 // Сделать рефакторинг
@@ -1098,11 +1061,8 @@ public final class Cat4 {
 ```
 
 
-
-
-
 --------------------------
-## Точка банк (стажировка)
+## Задача Точка банк (стажировка)
 
 ```java
 
@@ -1131,10 +1091,8 @@ boolean containsStringInData(String csvFile, String str) throws IOException {
 ```
 
 
-
-
 ---------------
-## СБЕР
+## Задача СБЕР
 
 ```java
 // Сделать рефакторинг кода
