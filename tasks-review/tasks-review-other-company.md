@@ -1,6 +1,116 @@
 # Задачи на ревью из других компаний
 
 
+
+
+
+## Задача Alfa Bank
+
+```java
+// Сделать рефакторинг (задача из одного красного банка)
+@RestController
+@RequestMapping(path = "/contract")
+public class ContractController {
+
+    private final ContractRepository repository;
+    private final ContractService contractService;
+
+    public ContractController(ContractRepository repository, ContractService contractService) {
+        this.repository = repository;
+        this.contractService = contractService;
+    }
+
+    @PostMapping(path = "/{contractId}/price")
+    public void updatePrice(@PathVariable Long contractId) {
+        Contract contract = repository.findById(contractId).orElseThrow();
+        contractService.setContract(contract);
+        contractService.updatePrice();
+    }
+}
+
+@Service
+public class ContractService {
+    
+    private final PriceService priceService;
+    
+    private Contract contract;
+    
+    public ContractService(PriceService priceService) {
+        this.priceService = priceService;
+    }
+
+    public void setContract(Contract contract) {
+        this.contract = contract;
+    }
+
+    public void updatePrice() {
+        if (contract != null) {
+            BigDecimal price = priceService.calcPrice(contract);
+            contract.setPrice(price);
+        }
+    }
+}
+
+class Contract {
+
+    private BigDecimal price;
+
+    public BigDecimal getPrice() {
+        return this.price;
+    }
+    
+    public void setPrice(BigDecimal price) {
+        this.price = price;
+    }
+}
+
+// Решение:
+/
+
+@RestController
+@RequestMapping(path = "/contract")
+public class ContractController {
+
+    private final ContractService contractService;
+
+    public ContractController(ContractService contractService) {
+        this.contractService = contractService;
+    }
+
+    @PostMapping(path = "/{contractId}/price")
+    public void updatePrice(@PathVariable Long contractId) {
+        contractService.updatePrice(contractId);
+    }
+}
+// Убрали логику из мтеода updatePrice
+
+@Service
+public class ContractService {
+    
+    private final PriceService priceService;
+    private final ContractRepository repository;
+    
+    public ContractService(PriceService priceService, ContractRepository repository) {
+        this.priceService = priceService;
+        this.repository = repository;
+    }
+
+    public void updatePrice(Long contractId) {
+        Contract contract = repository.findById(contractId).orElseThrow(() -> new IllegalArgumentException("Contract not found"));
+        BigDecimal price = priceService.calcPrice(contract);
+        contract.setPrice(price);
+        repository.save(contract); 
+    }
+}
+
+// Убрали состояние Contract из сервиса (некорректная работа в многопоточной среде)
+// Перенесли поиск контракта из контроллера в сервис
+// При необходимости еще можно добавить логи
+
+```
+
+
+
 ------------
 ## Задача web tech
 
@@ -456,4 +566,135 @@ boolean containsStringInData(String csvFile, String str) throws IOException {
 	return result;
 }
 
+```
+
+
+## Задача Axbit Group
+
+```java
+
+@Service
+@RequiredArgsConstructor
+public class DocumentProcessService {
+
+    private final DocumentRepo repo;
+
+    @Async
+    @Transactional
+    void revokeDocument(List<Document> docs) {
+        List<Integer> id_list = docs.stream().map(Document::getId).collect(Collectors.toList());
+        List<Document> list = repo.findAllById(id_list);
+
+        Optional<Document> doc = Optional.empty();
+        for (int i = 0; i < list.size(); i++) {
+            Integer statusId = list.get(i).getStatusId();
+            if (statusId == 4) {
+                doc = Optional.of(list.get(i));
+                break;
+            }
+        }
+
+        if (doc.isPresent()) return;
+
+        System.out.println("Processing document id: " + doc.get().getId());
+
+        int processed = process(doc.get());
+
+        if (processed == 1) {
+            // Сохраняем документ, если он был обработан
+            repo.save(doc.get());
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int process(Document doc) {
+        Integer result = 0;
+        doc.getAssistants().forEach(a -> a.setFullName("dismissed"));
+        // some logic:
+        // if document is processed returns 1, else 0
+        return result;
+    }
+}
+```
+
+
+## Иннотех
+
+```java
+
+
+// Ниже приведен код обновления статуса заказа. 
+// Необходимо найти проблемы и внести изменения в приведенный код.
+
+@Service
+public class OrderService {
+
+    @Autowired
+    private OrderRepository orderRepository;
+
+    private final NotificationService notificationService;
+
+    @Autowired
+    public OrderService(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
+
+    public void updateOrderStatus(Long orderId, String newStatus) {
+        Order order = orderRepository.findById(orderId).get();
+
+        if (newStatus.equals("COMPLETED")) {
+            order.setStatus("COMPLETED");
+            orderRepository.save(order);
+            notificationService.notifyUser(order.getUserId(), "Your order is completed");
+        } else if (newStatus.equals("CANCELLED")) {
+            order.setStatus("CANCELLED");
+            orderRepository.save(order);
+            notificationService.notifyUser(order.getUserId(), "Your order is cancelled");
+        } else if (newStatus.equals("PENDING")) {
+            order.setStatus("PENDING");
+            orderRepository.save(order);
+        } else if (newStatus.equals("IN_PROGRESS")) {
+            order.setStatus("IN_PROGRESS");
+            orderRepository.save(order);
+        } else {
+            throw new IllegalArgumentException("Unsupported status: " + newStatus);
+        }
+    }
+}
+
+
+// Решение
+
+
+
+@Service
+@RequiredArgsConstructor
+public class OrderService {
+
+    private static final List<String> SUPPORTED_STATUSES = List.of("COMPLETED", "CANCELLED", "PENDING", "IN_PROGRESS");
+
+    private final OrderRepository orderRepository;
+    private final NotificationService notificationService;
+
+    public void updateOrderStatus(Long orderId, String newStatus) {
+        if (!SUPPORTED_STATUSES.contains(newStatus)) {
+            throw new UnsupportedOrderStatusException(newStatus);
+        }
+
+        Order order = getOrder(orderId);
+
+        order.setStatus(newStatus);
+        orderRepository.save(order);
+
+        if (newStatus.equals("COMPLETED") || newStatus.equals("CANCELLED")) {
+            notificationService.notifyUser(order.getUserId(), "Your order is completed");
+        }
+    }
+
+    public Order getOrder(Long orderId) {
+        return orderRepository.findById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("Order with id '%s' not found".formatted(orderId)));
+    }
+
+}
 ```

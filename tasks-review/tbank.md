@@ -1,8 +1,7 @@
 # Задачи на ревью
 
 
-
-## Задача tbank#1
+## Задача tbank#1  (разобрано, см. task-review-success.md)
 
 ```java
 // Сделать код ревью 
@@ -19,7 +18,7 @@ import java.util.UIID;
 @Service
 public class SeatBookingService {
     
-    //-> FIXME: Сделать внедрение зависимостей через конструктор 
+
     @Autowired private SeatBookingRepository seatBookingRepository;
     @Autowired private TicketRepository ticketRepository;
     @Autowired private TariffClient tariffClient;
@@ -34,40 +33,29 @@ public class SeatBookingService {
     @Transactional
     public void bookSeat(String seatCode, UIID ticketId) { //-> FIXME: UUID
         
-        // Ищем билет по id
-        //-> FIXME: добавить обработку исключения "Билет не найден"
-        
-        // var ticket = ticketRepository.findById(ticketId);
+         var ticket = ticketRepository.findById(ticketId);
         
         // бронируем: 
-        // Новая бронь места: код места, рейс, билет, статус "Забронировано" 
         var seatBooking = new SeatBooking(seatCode, ticket.get().getFlightId(), ticketId, BookingStatus.BOOKED);
         // сохраняем бронь
         seatBookingRepository.save(seatBooking);
 
         // ищем базовый тариф для выбранного места в самолете
-        //-> FIXME: "Рест в транзакции"
-        var basePrice = tariffClient.getBasePrice(ticket.get().getPlaneModel(), seatCode);
+        var basePrice = tariffClient.getBasePrice(
+            ticket.get().getPlaneModel(), seatCode
+        );
         
         // ищем данные о клиенте
-        //-> FIXME: 1) getPrincipal() может возвращать объект; 
-        //        2) cервис привязывается к контексту безопасности, поэтому его 
-        //           будет сложно протестировать, если контекст не задан; 
-        //        3) пользователя следует передавать из контроллера
-        long userId = (long) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        long userId = (long) SecurityContextHolder
+        .getContext().getAuthentication().getPrincipal();
         
-        
-        //-> получение данных клиента из внешнего сервиса
-        //-> FIXME: 1) "Рест в транзакции"; 
-        //        2) Добавить или обработать исключение "Если клиент не найден"
+    
         var userData = customerClient.getCustomer(userId);
         
-        //-> FIXME: проблема: "println вместо логов"
         System.out.println("Найден пользователь " + userData.getFio() + " номер документа " + userData.getDocument());
         
         var price = basePrice;
         
-        //-> FIXME: проблема: "магические константы"
         if (userData.getTariff() == "PREMIUM") {
             // скидка 50%
             price = basePrice * 0.5d;
@@ -161,13 +149,11 @@ public enum BookingStatus {
 /**
   * API поиска авторов и их книг по имени автора (полное ФИО или часть имени 
     в любом регистре).
-  * Также компонент при каждом поиске обновляет статистику по частоте использования 
-    поисковой строки (сбрасывается раз в сутки другой системой)
+  * Также компонент при каждом поиске обновляет статистику по частоте использования поисковой строки (сбрасывается раз в сутки другой системой)
   * При обнаружении популярного запроса (> 1000 запросов в сутки), по которому 
     находится много авторов, отправляется алерт.
   * Алерт должен отправляться не более 1 раза за сутки для каждого запроса
-  * Все классы на самом деле находятся в разных файлах, однако здесь представлены 
-    в одном месте для удобства
+  * Все классы на самом деле находятся в разных файлах, однако здесь представлены в одном месте для удобства
 */
 
 @RestController
@@ -197,7 +183,8 @@ public class AuthorSearchService {
     // В query может быть как полностью ФИО, так и часть имени, например "Вадим Панов" или "панов"
     @Transactional
     public List<Author> search(String query) {
-        List<Author> authors = authorsRepository.findByNameContainingIgnoreCase(query);
+        List<Author> authors = authorsRepository
+        .findByNameContainingIgnoreCase(query);
         Statistics s = statisticsRepository.findById(query).orElse(null);
         if (s == null) s = new Statistics(query);
         s.setNumbers(s.getNumbers() + 1);
@@ -267,12 +254,11 @@ import java.util.Date;
 import java.util.List;
 
 /**
- 
-Сервис тарификации вознаграждений сотрудникам за дополнительную работу.*
-Каждый сотрудник может выполнять что-либо помимо основной работы - проводить лекции,
- выступать на конференциях и т.д.
+Сервис тарификации вознаграждений сотрудникам за дополнительную работу.
+Каждый сотрудник может выполнять что-либо помимо основной работы - проводить лекции, выступать на конференциях и т.д.
 Такие действия оплачиваются согласно тарифам, с учетом заслуг сотрудника (личного бонусного коэффициента).
-Оплата проходит через внешний сервис, вызываемый по REST.*/
+Оплата проходит через внешний сервис, вызываемый по REST.
+*/
 @Service
 public class RewardBillingService {
   @Autowired
@@ -287,7 +273,7 @@ public class RewardBillingService {
   @Transactional
   public void handleRewards(List<Employee> employees) {
     for (Employee employee : employees) {
-      List<Reward> rewards = rewardRepository.findByEmployeeId(employee.getId());
+      List<Reward> rewards = rewardRepository.findByEmployeeId(employee.getId();
       for (Reward reward : rewards) {
         if (List.of("speech", "lesson", "help").contains(reward.getType())) {
           Tariff tariff = tariffRepository.findByTypeAndDate(reward.getType(), new Date()).get();
@@ -378,5 +364,5 @@ public class Increment {
         System.out.println(counter2);
         System.exit(0);
     }
-}#tbank | Прислать задачу | Подписаться
+}
 ```

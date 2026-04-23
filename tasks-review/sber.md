@@ -1,161 +1,38 @@
 # Задачи на ревью
 
-## Задача sber#1
+## Задача sber#1 (разобрано, см. task-review-success.md)
 
 ```java
-// @Service -> не указана аннотация @Service
+
 class UserService { //-> Класс, не объявлен как public 
-//-> TODO: Написать юнит тест для класса
-    
-//-> FIXME: Нельзя внедряемые бины создавать через new(), теряется контроль управления и прокси
     private UserRepository repo = new UserRepository();
-    
-    //-> Внедрение через конструктор лучше потому что:
-    // 1. Гарантирует, что зависимость будет установлена один раз при запуске приложения 
-    // и не изменится (случайно или намеренно) во время работы. 
-    // 2. При использовании конструктора объект не может быть создан без его зависимостей. 
-    // Spring просто не запустит приложение, если не найдет нужный бин.
     private  RegionService regionService; //-> Не указан final
-    
+
     public UserService(final ApplicationContext appCtx) {
-        //-> Строки не используются. Не использовать магические константы
-        // 1. Имя бина может измениться
-        // 2. Сложно тестировать: придется мокировать весь контекст
-        // 3. При внедрении через конструктор Spring обнаруживает циклические зависимости 
         regionService = appCtx.getBean("regionService", RegionService.class);
     }
 
-    //-> TODO: regionName заменить на Enum
     public void processNewUsers(final List<User> users, String regionName) {
         // …
-        
-        //-> FIXME: Замечания:
-        //1.  Вызов транзакционного метода из нетранзакционного, Лучше использовать Self Injection
-        //2.  Перезапись параметров: users = createUsers(users); — параметр users помечен как final, 
-        // этот код просто не скомпилируется, т.к. createUsers() переназначает значение переменной
         users = createUsers(users);
         // …
         users.stream()
-                //-> FIXME: Замечания
-                //1. forEach() а не foreach()
-                //2. Побочные эффекты в Stream: плохой тон, проблема производительности: 
-                // для 1000 пользователей будет выполнено 1000 запросов.
-            .foreach(u -> regionService.updateRegionLink(u.getId(), regionName));
-            // если в RegionService сложная логика - можно обрабатывать по одному пользователю
-            // forEach(u -> regionService.updateRegionLink(u, regionName));
+            .foreach(u -> regionService.updateRegionLink(u.getId(), regionName);
     }
 
     @Transactional
-    public List<User> createUsers(final List<User> users) { //-> Написать один инсерт
-        
-        //-> FIXME: Замечание:
-        // Проблема N+1 в БД: В методе createUsers вызывается save в цикле. 
-        // Это порождает множество мелких запросов. У Spring Data JPA есть метод saveAll(), 
-        // который работает гораздо эффективнее.
+    public List<User> createUsers(final List<User> users) { 
         return users.stream()
                 .map(u -> repo.saveUser(u))
                 .collect(Collectors.toList());
     }
 
-//-> FIXME: Неиспользуемый метод
     private User getUser(final int userId) {
         return repo.getUserById(userId);
     }
 }
 
-///-> Исправлено:
-
-@Repository
-public interface RegionRepository extends JpaRepository<Region, Long> {
-    
-    //-> Один запрос сохраняет все сразу
-    @Modifying(clearAutomatically = true, flushAutomatically = true)// Обязательно для запросов UPDATE/DELETE
-    @Transactional // Нужно, если метод вызывается вне другой транзакции
-    @Query("UPDATE User u SET u.regionName = :regionName WHERE u.id IN :ids")
-    void updateRegionForUsers(@Param("ids") List<Long> ids, @Param("regionName") String regionName);
-}
-
-
-/**
- * // Батчинг:
- * # Включаем батчинг (стандарт — от 20 до 50)
- * spring.jpa.properties.hibernate.jdbc.batch_size=50
- * 
- * # Заставляем Hibernate группировать похожие запросы
- * spring.jpa.properties.hibernate.order_inserts=true
- * spring.jpa.properties.hibernate.order_updates=true
- * 
- * # (Опционально) Для статистики, чтобы увидеть батчи в логах
- * spring.jpa.properties.hibernate.generate_statistics=true
- * 
- * Генерация ID у сущности User не IDENTITY (лучше SEQUENCE),
- * иначе батчинг на вставку не включится.
- */
-
-
-@Service
-@RequaredArgsConstructor
-public class UserService{
-    
-    public void processNewUsers(List<User> users, String regionName) {
-        /// -> Если небольшое количество пользователей:
-        // 1. Сохраняем новых пользователей (используем saveAll для батчинга)
-        List<User> savedUsers = repo.saveAll(users);
-        // 2. Собираем ID сохраненных пользователей
-        List<Long> ids = savedUsers.stream()
-                .map(User::getId)
-                .toList();
-        // 3. Один запрос к БД вместо цикла! 
-        // Напрямую через репозиторий, без лишних сервисов.
-        repo.updateRegionForUsers(ids, regionName);
-
-        
-        //-> Или сразу проставляем регион и сохраняем:
-        // 1. Прямо в памяти проставляем регион каждому пользователю
-        users.forEach(u -> u.setRegionName(regionName));
-        // 2. Сохраняем всех одним махом (Hibernate использует JDBC Batching)
-        repo.saveAll(users);
-        
-        
-        /// -> Если пользователей будет миллион:
-        int batchSize = 50; // Тот же размер, что в настройках hibernate.jdbc.batch_size
-        AtomicInteger counter = new AtomicInteger();
-        users.forEach(user -> {
-            user.setRegionName(regionName);
-            repo.save(user); // Пока только складываем в очередь Hibernate
-
-            // Каждые 50 записей сбрасываем данные в БД и чистим память
-            if (counter.incrementAndGet() % batchSize == 0) {
-                entityManager.flush(); // Отправить батч в базу
-                entityManager.clear(); // Очистить кэш Hibernate, чтобы память не кончалась
-            }
-        });
-
-
-        /**
-         * Использование AtomicInteger здесь обусловлено тем, как работают лямбда-выражения в Java.
-         Внутри forEach (лямбды) вы можете использовать переменные извне только в том случае, если они final или effectively final (то есть их значение не меняется после инициализации).
-         ## Почему нельзя обычный int?
-         Если вы объявите int counter = 0;, а внутри лямбды попытаетесь сделать counter++, компилятор выдаст ошибку:
-         "Variable used in lambda expression should be final or effectively final".
-         Java запрещает изменять простые переменные внутри лямбд, чтобы избежать проблем с потокобезопасностью и областью видимости.
-         ## Почему AtomicInteger решает проблему?
-
-         1. Обход ограничения final: Сама ссылка на объект AtomicInteger остается неизменной (final), а вот внутреннее состояние объекта (число внутри него) мы можем менять с помощью метода incrementAndGet().
-         2. Потокобезопасность: Если вы решите сделать стрим параллельным (userStream.parallel()), обычный int начал бы «врать» из-за состояния гонки (race condition). AtomicInteger гарантирует, что инкремент будет выполнен корректно даже в несколько потоков.
-
-         Лайфхак:
-         Если вы на 100% уверены, что поток будет только один, вместо AtomicInteger иногда используют массив из одного элемента: int[] counter = {0};, но это считается «грязным» кодом. AtomicInteger — более стандартный и понятный путь.
-
-         */
-        
-        
-    }
-}
-
-
 ```
-
 
 
 ------------
@@ -320,3 +197,198 @@ public class OrderRequest {
 
 ```
 
+
+## Задача sber#5
+
+```java
+// Сбер
+
+//Сделать рефакторинг
+
+@RestController
+@Transactional
+@RequiredArgsConstructor
+public class ProcessActionController {
+    private final PushHandler pushHandler;
+    private final SmsHandler smsHandler;
+
+    
+    @PostMapping(value = "/doAction", consumes = {MediaType.ALL_VALUE})
+    public ResponseEntity<Object> doIt(@ResponseBody @Valid ActionRequ request) {
+        Action a = request.getaction();
+        if (a == Action.SEND_PUSH)) {
+            return pushHandler.process(request);
+        } 
+        if (a == Action.SEND_SMS) {
+            return smsHandler.process(request);
+        }
+        return ResponseEntity.ok().body(UserRs.getDefaultResponce("It's default response. "));
+    }
+}
+
+@Data
+class ActionRequ {
+    @NotNull
+    private Integer id;
+    @NotNull
+    private Action action;
+    //...
+}  
+```
+
+
+## Задача sber#6
+
+```java
+// Сбер
+// Сервис определения типа мяча по ID мяча
+// Известно, что:
+// * Вызываемый сервис BallPropertiesService возвращает список свойств (List<BallProperty>) для одного мяча. Размер списка от 0 до 2^30.
+// * Значения BallProperty.code от 0 до 9 описывают размер мяча (т.е. 0 - микроскопический, 9 - гигантский).
+// * Значения BallProperty.code от 100 до 129 описывают материал мяча.
+// * Значения BallProperty.code в других диапазонах существуют, но бизнес ценности в данном случае не несут.
+// * Если в списке:
+//    - пришел проперти с кодом 7, то считаем, что мяч баскетбольный
+//    - пришел проперти с кодом 6, то считаем, что мяч футбольный
+//    - пришел проперти с кодом 5, то считаем, что мяч тенисный
+//    - пришел проперти с кодом 5 и еще проперти 102, то считаем, что это ядро
+//    - не пришло что-то из выше описанного, то считаем, что это мяч для пингпонга
+// * Гарантируется, что если в списке присутствует BallProperty с кодом из какого-то диапазона, то не может
+//   быть в этом же списке BallProperty с другим кодом из этого диапазона (т.е. в одном списке не будет 
+//   одновременно кодов 1 и 2)
+// Что не так?
+
+@Service
+@RequiredArgsConstructor
+public class BallTypeService {
+    private final BallPropertiesService ballPropertiesService;
+
+    public BallType getType(Long ballId) {
+        List<BallProperty> ballProperties = ballPropertiesService.getBallProperties(ballId);
+        ballProperties.sort(Comparator.comparing(BallProperty::getCode).reversed());
+        return resolveType(ballProperties);
+
+    }
+
+    private BallType resolveType(List<BallProperty> ballProperties) {
+        long propertyNum = ballProperties.get(0).getCode();
+        long propertyNext = ballProperties.get(1).getCode();
+        if (propertyNum == 102 && propertyNext == 5) {
+            return BallType.CANNON_BALL;
+        }
+        if (propertyNum == 7) {
+            return BallType.BASKET_BALL;
+        }
+        if (propertyNum == 6) {
+            return BallType.FOOT_BALL;
+        } 
+        if (propertyNum == 5) {
+            return BallType.TENNIS_BALL;
+        }
+        return BallType.PING_PONG_BALL;
+    }
+}
+
+public enum BallType {
+    BASKET_BALL,
+    FOOT_BALL,
+    CANNON_BALL,
+    TENNIS_BALL,
+    PING_PONG_BALL;
+}
+
+// библиотечный код
+@Data
+public class BallProperty {
+    private Integer group;
+    private Integer code;
+    private String description;
+}
+
+public interface BallPropertiesService {
+    List<BallProperty> getBallProperties(Long itemId);
+}#sber
+  Прислать задачу | Подписаться
+```
+
+
+
+## Задача sber#7
+
+```java
+// СБЕР
+
+
+@Service
+@RequiredArgsConstructor
+@Sl4j
+class ProductServiceImpl implements ProductService {
+    private final ProductRepository repository;
+    private OtherService otherService;
+    private Map<String, String> dictionary;
+
+    @PostConstruct
+    @Transactional
+    public void postConstruct(){
+        dictionary = otherService.getDictionary();
+    }
+
+    @Autowired
+    public void setOtherService(OtherService otherService) {
+        this.otherService = otherService;
+    }
+
+
+    /** Метод возвращает список обработанных Продуктов
+     *
+     * @param productIds
+     * @return
+     */
+    @Transactional
+    public List<ProductProcessResult> processProducts(List<Long> productIds){
+        productIds.stream().map(productIds.mapToObject)
+        //TODO
+    }
+
+    @Transactional
+    public Product getProduct(Long id){
+
+        if(id == null){
+            throw new UnsupportedOperationException("Не поддерживается");
+        }
+        return repository.findById(id);
+    }
+
+    public ProductProcessResult process(Product product) throws IOException
+        if(product.getProductStatus() == PROCESSED){
+        throw new IOException("нельзя обрабатывать продукт в состоянии PROCESSED");
+    }
+        otherService.process(product);
+        product.setProductState(PROCESSED);
+        return product;
+}
+}
+
+@Getter
+@HashcodeAndEquals
+public class Product {
+    enum ProductStatus{
+        NEW, PROCESSED
+    }
+
+    private int id;
+    private ProductStatus productStatus;
+    private String name;
+    private Double price;
+    private List<String> tags;
+
+    Product(int id, ProductStatus productStatus, String name, Double price, List<String> tags){
+        this.id = id;
+        this.productStatus = productStatus;
+        this.name = name;
+        this.price = price;
+        this.tags = tags;
+    }
+
+}#sber | Прислать задачу | Подписаться
+```

@@ -192,7 +192,7 @@ public class SeatBookingService {
         // Ищем билет по id
         //-> FIXME: добавить обработку исключения "Билет не найден"
         
-        // var ticket = ticketRepository.findById(ticketId);
+        var ticket = ticketRepository.findById(ticketId);
         
         // бронируем: 
         // Новая бронь места: код места, рейс, билет, статус "Забронировано" 
