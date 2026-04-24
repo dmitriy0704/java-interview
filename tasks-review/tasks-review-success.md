@@ -133,23 +133,31 @@ public class UserService{
 
 
         /**
-         * Использование AtomicInteger здесь обусловлено тем, как работают лямбда-выражения в Java.
-         Внутри forEach (лямбды) вы можете использовать переменные извне только в том случае, если они final или effectively final (то есть их значение не меняется после инициализации).
-         ## Почему нельзя обычный int?
-         Если вы объявите int counter = 0;, а внутри лямбды попытаетесь сделать counter++, компилятор выдаст ошибку:
-         "Variable used in lambda expression should be final or effectively final".
-         Java запрещает изменять простые переменные внутри лямбд, чтобы избежать проблем с потокобезопасностью и областью видимости.
-         ## Почему AtomicInteger решает проблему?
-
-         1. Обход ограничения final: Сама ссылка на объект AtomicInteger остается неизменной (final), а вот внутреннее состояние объекта (число внутри него) мы можем менять с помощью метода incrementAndGet().
-         2. Потокобезопасность: Если вы решите сделать стрим параллельным (userStream.parallel()), обычный int начал бы «врать» из-за состояния гонки (race condition). AtomicInteger гарантирует, что инкремент будет выполнен корректно даже в несколько потоков.
+         * Использование AtomicInteger здесь обусловлено тем, как работают 
+         * лямбда-выражения в Java.
+         * Внутри forEach (лямбды) вы можете использовать переменные извне 
+         * только в том случае, если они final или effectively final (то есть 
+         * их значение не меняется после инициализации).
+         * ## Почему нельзя обычный int?
+         * Если вы объявите int counter = 0, а внутри лямбды попытаетесь 
+         * сделать counter++, компилятор выдаст ошибку:
+         * "Variable used in lambda expression should be final or effectively final".
+         * Java запрещает изменять простые переменные внутри лямбд, чтобы избежать 
+         * проблем с потокобезопасностью и областью видимости.
+         * ## Почему AtomicInteger решает проблему?
+         * 1. Обход ограничения final: Сама ссылка на объект AtomicInteger 
+         * остается неизменной (final), а вот внутреннее состояние объекта 
+         * (число внутри него) мы можем менять с помощью метода incrementAndGet().
+         * 2. Потокобезопасность: Если вы решите сделать стрим параллельным 
+         * (userStream.parallel()), обычный int начал бы «врать» из-за состояния 
+         * гонки (race condition). AtomicInteger гарантирует, что инкремент будет 
+         * выполнен корректно даже в несколько потоков.
 
          Лайфхак:
-         Если вы на 100% уверены, что поток будет только один, вместо AtomicInteger иногда используют массив из одного элемента: int[] counter = {0};, но это считается «грязным» кодом. AtomicInteger — более стандартный и понятный путь.
-
+         Если вы на 100% уверены, что поток будет только один, вместо AtomicInteger 
+         иногда используют массив из одного элемента: int[] counter = {0}, но это считается 
+         «грязным» кодом. AtomicInteger — более стандартный и понятный путь.
          */
-        
-        
     }
 }
 
@@ -276,7 +284,8 @@ public enum BookingStatus {
 
  Еще:
  1. В SeatBooking не определена колонка с PrimaryKey. Непонятно какой PK (простой или составной).
- 2. В SeatBooking хорошо бы добавить @AllArgsConstructor (не уверен, что в текущей конфигурации @Data включает в себя @AllArgsConstructor).
+ 2. В SeatBooking хорошо бы добавить @AllArgsConstructor (не уверен, что в текущей конфигурации @Data 
+ включает в себя @AllArgsConstructor)
  3. BookingStatus я бы переименовал в BookingStatusEnum, чтобы сразу по имени класса видеть, что это перечисление.
  4. public void bookSeat(String seatCode, UIID ticketId)  - "а что будет, если на вход подадутся значения null" ? Что будет, если seatCode не будет отвечать какому-то шаблону?
  На входные параметры нужен валидатор. Прежде проверить всегда дешевле чем получить в итоге откат ТА в результате выполнения операций на бд.
@@ -303,7 +312,106 @@ public enum BookingStatus {
  В функционал бизнес-метода надо включить обработку данных с учётом timeout'ов сторонних сервисов. Возможно, метод  надо будет переписать с реактивщиной.
  13. По поводу того, что можно и что нельзя выводить в лог, нужна консультация со службой безопасности организации.
  8а. Метод похож на часто используемый, поэтому получение идентификатора пользователя я бы сдвинул в базовый класс coarse-grained классов, и, наверное изменил бы тип вывода на Optional<Integer>, чтобы в клиентском классе решать что делать если пришел null.
- 
- 
 */
+
+
+// Исправлено:
+@Slfj    
+@Service
+@RequiredArgsConstructor
+public class SeatBookingService {
+
+     private final SeatBookingRepository seatBookingRepository;
+     private final TicketRepository ticketRepository;
+     private final TariffClient tariffClient;
+     private final CustomerClient customerClient;
+     private final PaymentClient paymentClient;
+     private final SeatBookingService self;
+    
+    /**
+     * Бронирование.
+     * @param seatCode код места (например 19A)
+     * @param ticketId ид билета
+     */
+
+    // 1. Метод БЕЗ @Transactional
+    public void bookSeat(String seatCode, UUID ticketId, Long userId) {
+        // Внешние вызовы делаем ЗДЕСЬ (сеть не держит транзакцию БД)
+        var userData = customerClient.getCustomer(userId);
+        var basePrice = tariffClient.getBasePrice(...);
+
+        // Расчет цены в памяти
+        double price = calculatePrice(basePrice, userData.getTariff());
+
+        // 2. Вызываем транзакционный метод только для записи
+        self.saveBookingAndSendInvoice(seatCode, ticketId, userId, price);
+    }
+    
+    @Transactional
+    public void saveBookingAndSendInvoice(String seatCode, UUID ticketId, Long userId, double price) {
+        var ticket = ticketRepository.findById(ticketId).orElseThrow();
+
+        var seatBooking = new SeatBooking(seatCode, ticket.getFlightId(), ticketId, BookingStatus.BOOKED);
+        seatBookingRepository.save(seatBooking);
+
+        // Инвойс отправляем в конце транзакции
+        paymentClient.sendInvoice(new Invoice(price, ticketId, userId));
+    }
+    
+    private double calculatePrice(double basePrice, TariffType tariff) {
+        return switch (tariff) {
+            case PREMIUM -> basePrice * 0.5;
+            case ULTRA -> basePrice * 0.8;
+            default -> basePrice;
+        };
+    }
+}
+
+@Entity
+@Table("seat_booking")
+public class SeatBooking {
+
+    @Id // Обязательно: первичный ключ
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "sb_seq")
+    @SequenceGenerator(name = "sb_seq", sequenceName = "seat_booking_id_seq", allocationSize = 50)
+    private Long id;
+
+    @Column(name = "seat_code", nullable = false)
+    private String seatCode;
+
+    @Column(name = "flight_id", nullable = false)
+    private UUID flightId;
+
+    @Column(name = "ticket_id", nullable = false)
+    private UUID ticketId;
+
+    @Enumerated(EnumType.STRING) // Сохраняем как текст (BOOKED), а не цифру
+    @Column(nullable = false)
+    private BookingStatus status;
+
+    @Column
+    private BookingStatus status;
+
+    // конструктор по умолчанию
+    // конструктор с параметрами кроме id
+    
+    // equals и hashCode переопределяем только по id для стабильности в коллекциях
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof SeatBooking that)) return false;
+        return id != null && id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
+}
+
+public enum BookingStatus {
+    BOOKED, PAID
+}
+
+
 ```

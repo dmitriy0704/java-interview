@@ -2,7 +2,6 @@
 
 ```java
 
-
 @RestController
 @RequestMapping("/orders")
 public class OrderController {
@@ -11,7 +10,7 @@ public class OrderController {
     private OrderService orderService;
 
     @PostMapping
-    public ResponseEntity createOrder(@RequestBody CreateOrderRequest request) {
+    public ResponseEntity<Order> createOrder(@RequestBody CreateOrderRequest request) {
         Order order = orderService.createOrder(request);
         return ResponseEntity.ok(order);
     }
@@ -32,6 +31,11 @@ public class OrderService {
     @Transactional
     public Order createOrder(CreateOrderRequest request) {
 
+        //  Задача: SQL: блокировки(оптимистические, пессимистически), 
+        //  уровни изоляции транзакции, индексы,
+        
+        
+        
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new RuntimeException("Product not found"));
 
