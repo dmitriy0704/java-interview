@@ -30,11 +30,6 @@ public class OrderService {
 
     @Transactional
     public Order createOrder(CreateOrderRequest request) {
-
-        //  Задача: SQL: блокировки(оптимистические, пессимистически), 
-        //  уровни изоляции транзакции, индексы,
-        
-        
         
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new RuntimeException("Product not found"));
